@@ -11,6 +11,7 @@ import type {
 } from '../widgets/types'
 import { ImageEditorModal } from './ImageEditorModal'
 import { uploadImage } from '@/lib/client/upload-image'
+import { detectPlatform } from '@/bento/widgets/registry'
 
 interface WidgetEditorPanelProps {
     widget: WidgetConfig
@@ -86,7 +87,7 @@ function LinkFields({ widget, onUpdate }: { widget: LinkWidgetConfig; onUpdate: 
 
     return <>
         <label className={labelClass}>链接地址
-            <input className={fieldClass} type="url" value={widget.url} onChange={event => onUpdate({ url: event.target.value })} />
+            <input className={fieldClass} type="url" value={widget.url} onChange={event => onUpdate({ url: event.target.value, platform: detectPlatform(event.target.value), linkHealth: undefined })} />
         </label>
         <label className={labelClass}>标题
             <OptionalText value={widget.title} placeholder="自动识别平台名称" onChange={title => onUpdate({ title })} />
@@ -123,6 +124,16 @@ function LinkFields({ widget, onUpdate }: { widget: LinkWidgetConfig; onUpdate: 
         </label>
         <label className={labelClass}>自定义图标（URL 或 Emoji）
             <OptionalText value={widget.customIcon} onChange={customIcon => onUpdate({ customIcon })} />
+        </label>
+        <label className={labelClass}>收藏夹
+            <OptionalText value={widget.collection} placeholder="未分类" onChange={collection => onUpdate({ collection: collection?.trim().slice(0, 64) })} />
+        </label>
+        <label className={labelClass}>标签（用逗号分隔）
+            <input className={fieldClass} defaultValue={(widget.tags || []).join(', ')} onBlur={event => onUpdate({ tags: [...new Set(event.target.value.split(',').map(value => value.trim().slice(0, 32)).filter(Boolean))].slice(0, 12) })} />
+        </label>
+        <label className="flex items-center gap-2 text-xs font-medium text-black/60">
+            <input type="checkbox" checked={widget.onCanvas !== false} onChange={event => onUpdate(event.target.checked ? { onCanvas: true, x: undefined, y: undefined } : { onCanvas: false })} />
+            显示在画布上
         </label>
     </>
 }

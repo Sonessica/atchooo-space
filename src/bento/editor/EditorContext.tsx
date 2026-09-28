@@ -99,6 +99,7 @@ const EditorContext = createContext<EditorContextValue | undefined>(undefined)
 const CONTENT_PROPERTIES = [
     'category', 'type', 'content', 'url', 'title', 'description',
     'imageUrl', 'platform', 'subtitle', 'ctaLabel', 'customIcon', 'customColor',
+    'collection', 'tags', 'onCanvas', 'linkHealth', 'backgroundImage', 'iconUrl', 'menuBg',
     'address', 'lat', 'lng', 'location', 'zoom', 'style', 'variant', 'attribution', 'emoji'
 ] as const
 

@@ -27,6 +27,15 @@ import {
 
 const STEP = BENTO_UNIT + BENTO_GAP
 
+function canvasParticipants(widgets: WidgetConfig[]) {
+  return widgets.filter(widget => widget.category !== 'link' || widget.onCanvas !== false)
+}
+
+function mergePositions(all: WidgetConfig[], positioned: WidgetConfig[]) {
+  const byId = new Map(positioned.map(widget => [widget.id, widget]))
+  return all.map(widget => byId.get(widget.id) || widget)
+}
+
 function widgetPixelSize(size: WidgetSize) {
   const meta = WIDGET_SIZES[size]
   if (meta) return { width: meta.width, height: meta.height }
@@ -41,7 +50,8 @@ function matchesQuery(w: WidgetConfig, q: string) {
   const title = 'title' in w ? String((w as { title?: string }).title || '') : ''
   const url = 'url' in w ? String((w as { url?: string }).url || '') : ''
   const content = 'content' in w ? String((w as { content?: string }).content || '') : ''
-  return `${title} ${url} ${content} ${w.category}`.toLowerCase().includes(s)
+  const tags = w.category === 'link' ? (w.tags || []).join(' ') : ''
+  return `${title} ${url} ${content} ${tags} ${w.category}`.toLowerCase().includes(s)
 }
 
 function targetIsFormControl(target: EventTarget | null) {
@@ -209,6 +219,7 @@ export function InfiniteCanvas({
     if (!viewportSize.width || !viewportSize.height) return []
     const overscan = STEP * 2
     return widgets.filter((w) => {
+      if (w.category === 'link' && w.onCanvas === false) return false
       if (w.hidden && !isEditing) return false
       if (w.id === selectedWidgetId || w.id === draggingId || w.id === editingWidgetId || w.id === lightbox?.widgetId) return true
       const x = (typeof w.x === 'number' ? w.x : 0) * STEP + cullPan.x
@@ -262,7 +273,7 @@ export function InfiniteCanvas({
       const dy = dragY.get()
       const cellX = Math.round((c.origX * STEP + dx) / STEP)
       const cellY = Math.round((c.origY * STEP + dy) / STEP)
-      const next = resolveCanvasDrop(widgets, c.id, cellX, cellY, showSearch)
+      const next = mergePositions(widgets, resolveCanvasDrop(canvasParticipants(widgets), c.id, cellX, cellY, showSearch))
       const changed = next.some((widget, index) => widget.x !== widgets[index].x || widget.y !== widgets[index].y)
       if (changed && onWidgetsChange) onWidgetsChange(next)
       else if (changed) {
@@ -429,8 +440,21 @@ export function InfiniteCanvas({
               key={w.id}
               id={`widget-${w.id}`}
               data-canvas-card
+              role={!isEditing && w.category === 'link' ? 'link' : undefined}
+              tabIndex={!isEditing && w.category === 'link' ? 0 : undefined}
+              aria-label={!isEditing && w.category === 'link' ? `打开 ${w.title || w.url}` : undefined}
               data-widget-hidden={isHiddenCard ? 'true' : undefined}
               onDragStart={(e) => e.preventDefault()}
+              onClick={(event) => {
+                if (isEditing || w.category !== 'link' || !w.url) return
+                if ((event.target as HTMLElement).closest('a, button')) return
+                window.open(w.url, '_blank', 'noopener,noreferrer')
+              }}
+              onKeyDown={(event) => {
+                if (isEditing || w.category !== 'link' || !w.url || event.key !== 'Enter') return
+                event.preventDefault()
+                window.open(w.url, '_blank', 'noopener,noreferrer')
+              }}
               className="absolute cursor-pointer select-none"
               initial={false}
               animate={{
@@ -501,7 +525,7 @@ export function InfiniteCanvas({
                   onDuplicate={() => onDuplicateWidget?.(w.id)}
                   onDelete={() => onRemoveWidget(w.id)}
                   onSizeChange={(size) => {
-                    const next = resolveCanvasResize(widgets, w.id, size, showSearch)
+                    const next = mergePositions(widgets, resolveCanvasResize(canvasParticipants(widgets), w.id, size, showSearch))
                     if (onWidgetsChange) onWidgetsChange(next)
                     else {
                       for (const widget of next) {

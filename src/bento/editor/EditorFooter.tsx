@@ -11,8 +11,9 @@ export const EditorFooter: React.FC<{
     isEditing?: boolean
     onToggleEdit?: () => void
     onOpenSettings?: () => void
+    onOpenLibrary?: () => void
     onAutoLayout?: (mode?: 'compact' | 'balanced' | 'organic' | 'rows' | 'columns' | 'focus') => void
-}> = ({ isEditing = false, onToggleEdit, onOpenSettings, onAutoLayout }) => {
+}> = ({ isEditing = false, onToggleEdit, onOpenSettings, onOpenLibrary, onAutoLayout }) => {
     const [layoutsOpen, setLayoutsOpen] = useState(false)
     return (
         <div
@@ -32,6 +33,7 @@ export const EditorFooter: React.FC<{
             </button>
 
             <div className="flex items-center gap-2">
+                <button type="button" onClick={onOpenLibrary} className="rounded-full bg-black/5 px-3 py-2 text-[13px] font-semibold text-black/70 hover:bg-black/10">收藏夹</button>
                 {isEditing && onAutoLayout && (
                     <button
                         type="button"

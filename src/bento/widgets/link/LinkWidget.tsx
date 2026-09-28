@@ -559,7 +559,7 @@ export function createLinkWidgetConfig(
     const info = extractPlatformInfo(url)
 
     return {
-        id: `link-${Date.now()}`,
+        id: `link-${crypto.randomUUID()}`,
         category: 'link',
         size,
         url,

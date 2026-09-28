@@ -162,6 +162,11 @@ Undo/Redo 使用统一快照历史，覆盖创建、删除、复制、内容更�
 - URL、标题、副标题、CTA、图标、背景色、菜单色和背景图。
 - 根据 URL 自动检测平台并使用平台默认信息。
 - 支持 GitHub、YouTube、X/Twitter、Instagram、TikTok、Spotify、LinkedIn、Facebook、Pinterest、Threads、Discord、Telegram、Twitch、Medium、Reddit 等平台及通用链接。
+- 同一平台的不同账号可分别建立卡片；每张卡片有独立 ID、URL、标题与背景图。编辑工具栏创建时可手填账号名称和头像/背景图片 URL，创建后也可在编辑面板上传背景图。
+- 浏览模式下点击卡片可直接打开 URL；左下角图标仍可设为单独的跳转地址。
+- 编辑工具栏提供“批量导入 Link”，可上传或粘贴 CSV、JSON，预览后一次加入当前 Space。CSV 第一行须有 `url`，可选列为 `title`、`subtitle`、`ctaLabel`、`backgroundImage`、`customIcon`、`menuBg`、`collection`、`tags`、`onCanvas`；CSV 的多个标签用分号分隔，JSON 的 `tags` 可用字符串数组。每次最多 200 条，仅接受 HTTP/HTTPS URL。
+- 页面左下角“收藏夹”汇总四个 Space 的 Link，可按标题、URL、标签、收藏夹和检查状态筛选。编辑模式下可设置标签和收藏夹，也可把链接从当前画布移除并保留在收藏夹，之后再显示到画布。其他 Space 的链接可跳转到对应 Space 编辑或复制到当前画布。
+- 编辑模式下可手动检查当前 Space 的全部或单条链接。检查结果分为正常、已跳转、失效（404/410）和无法判断，随 Space 快照保存；修改 URL 会清除旧结果。检查接口需要管理员会话，并拒绝请求内网地址。
 
 ### Media / Gallery
 

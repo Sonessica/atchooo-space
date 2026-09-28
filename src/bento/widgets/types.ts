@@ -86,6 +86,18 @@ export interface LinkWidgetConfig extends BaseWidgetConfig {
     menuBg?: string
     /** Full-card background image (uploaded WebP or remote URL) */
     backgroundImage?: string
+    /** Collection and tags are shared concepts across the four Spaces. */
+    collection?: string
+    tags?: string[]
+    /** A saved link can remain in the library without occupying the canvas. */
+    onCanvas?: boolean
+    linkHealth?: {
+        status: 'ok' | 'redirected' | 'broken' | 'unknown'
+        checkedAt: string
+        httpStatus?: number
+        finalUrl?: string
+        error?: string
+    }
 }
 
 // ============ Image Widget ============

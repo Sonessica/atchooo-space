@@ -31,6 +31,7 @@ import { useClickOutside } from './hooks/useClickOutside'
 import { useDeviceDetection } from './hooks/useDeviceDetection'
 import { pairMediaFiles, uploadMedia } from '@/lib/client/upload-image'
 import { createGalleryImage } from '@/bento/widgets/image/gallery'
+import { LinkImportModal } from './LinkImportModal'
 
 // ============ Icons (Phosphor Icons - Duotone Style with Dopamine Colors) ============
 
@@ -120,6 +121,9 @@ export const EditorToolbar: React.FC = () => {
     const isMobileDevice = useDeviceDetection()
     const [showLinkModal, setShowLinkModal] = useState(false)
     const [linkUrl, setLinkUrl] = useState('')
+    const [linkTitle, setLinkTitle] = useState('')
+    const [linkBackground, setLinkBackground] = useState('')
+    const [showLinkImport, setShowLinkImport] = useState(false)
     const [imageUploadStatus, setImageUploadStatus] = useState<string | null>(null)
     const linkInputRef = useRef<HTMLInputElement>(null)
     const linkModalRef = useRef<HTMLFormElement>(null)
@@ -142,6 +146,8 @@ export const EditorToolbar: React.FC = () => {
     const handleAddLink = () => {
         setShowLinkModal(true)
         setLinkUrl('')
+        setLinkTitle('')
+        setLinkBackground('')
     }
 
     const handleLinkSubmit = async (e: React.FormEvent) => {
@@ -157,13 +163,21 @@ export const EditorToolbar: React.FC = () => {
         if (!normalizedUrl.startsWith('http://') && !normalizedUrl.startsWith('https://')) {
             normalizedUrl = `https://${normalizedUrl}`
         }
+        try {
+            const parsed = new URL(normalizedUrl)
+            if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('Invalid protocol')
+            normalizedUrl = parsed.toString()
+        } catch {
+            window.alert('请输入有效的 HTTP/HTTPS 链接')
+            return
+        }
 
         // Check if it's a generic link (not a known platform)
         const { detectPlatform } = await import('@/bento/widgets/registry')
         const platform = detectPlatform(normalizedUrl)
 
         // If it's a generic link, fetch metadata
-        if (platform === 'generic') {
+        if (platform === 'generic' && !linkTitle.trim() && !linkBackground.trim()) {
             try {
                 const response = await fetch(`/api/link/metadata?url=${encodeURIComponent(normalizedUrl)}`)
                 if (response.ok) {
@@ -171,9 +185,10 @@ export const EditorToolbar: React.FC = () => {
                     if (metadata.success) {
                         // Create widget with metadata
                         addWidget(createLinkWidgetConfig(normalizedUrl, '1x1', {
-                            title: metadata.title,
+                            title: linkTitle.trim() || metadata.title,
                             customIcon: metadata.favicon,
                             subtitle: metadata.description,
+                            backgroundImage: linkBackground.trim() || undefined,
                         }))
                         setShowLinkModal(false)
                         setLinkUrl('')
@@ -187,55 +202,20 @@ export const EditorToolbar: React.FC = () => {
         }
 
         // Default: Create widget without metadata (or if metadata fetch failed)
-        addWidget(createLinkWidgetConfig(normalizedUrl, '1x1'))
+        addWidget(createLinkWidgetConfig(normalizedUrl, '1x1', {
+            ...(linkTitle.trim() ? { title: linkTitle.trim() } : {}),
+            ...(linkBackground.trim() ? { backgroundImage: linkBackground.trim() } : {}),
+        }))
         setShowLinkModal(false)
         setLinkUrl('')
-    }, [addWidget])
+    }, [addWidget, linkTitle, linkBackground])
 
     const handleLinkModalClose = () => {
         setShowLinkModal(false)
         setLinkUrl('')
+        setLinkTitle('')
+        setLinkBackground('')
     }
-
-    // Auto-detect and add link when valid URL is detected
-    useEffect(() => {
-        if (!showLinkModal || !linkUrl.trim()) return
-
-        const trimmedUrl = linkUrl.trim()
-        
-        // Check if it looks like a URL (contains domain-like structure)
-        // Pattern: has a dot and looks like a domain (e.g., github.com, instagram.com/user)
-        const urlPattern = /^(https?:\/\/)?([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}(\/.*)?$/
-        const looksLikeUrl = urlPattern.test(trimmedUrl) || 
-                            trimmedUrl.includes('http://') || 
-                            trimmedUrl.includes('https://') ||
-                            trimmedUrl.includes('www.')
-
-        if (looksLikeUrl) {
-            // Normalize URL (add https:// if missing)
-            let normalizedUrl = trimmedUrl
-            if (!trimmedUrl.startsWith('http://') && !trimmedUrl.startsWith('https://')) {
-                normalizedUrl = `https://${trimmedUrl}`
-            }
-
-            // Validate URL using URL constructor
-            try {
-                new URL(normalizedUrl)
-                
-                // Small delay to ensure user finished typing/pasting
-                const timer = setTimeout(async () => {
-                    // Double-check the URL hasn't changed
-                    if (linkUrl.trim() === trimmedUrl && showLinkModal) {
-                        await handleAddLinkWithMetadata(normalizedUrl)
-                    }
-                }, 300) // 300ms debounce - enough time for paste to complete
-
-                return () => clearTimeout(timer)
-            } catch {
-                // Invalid URL, do nothing
-            }
-        }
-    }, [linkUrl, showLinkModal, handleAddLinkWithMetadata])
 
     // Close modal on Escape key
     useEffect(() => {
@@ -359,14 +339,15 @@ export const EditorToolbar: React.FC = () => {
                     <form 
                         ref={linkModalRef}
                         onSubmit={handleLinkSubmit}
-                        className="bg-white rounded-[12px] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.08)] border border-black/8 flex items-center overflow-hidden min-w-[400px]"
+                        className="bg-white rounded-[12px] shadow-lg border border-black/8 grid gap-2 p-3 min-w-[400px]"
                     >
+                        <span className="text-sm font-semibold">添加账号链接</span>
                         <input
                             ref={linkInputRef}
-                            type="url"
+                            type="text"
                             value={linkUrl}
                             onChange={(e) => setLinkUrl(e.target.value)}
-                            placeholder="Enter Link"
+                            placeholder="账号链接 URL"
                             className={cn(
                                 "flex-1 px-4 py-3",
                                 "text-[14px] text-black placeholder:text-black/40",
@@ -375,6 +356,9 @@ export const EditorToolbar: React.FC = () => {
                             )}
                             autoComplete="off"
                         />
+                        <input className="rounded-lg border border-black/10 px-3 py-2 text-sm" value={linkTitle} onChange={e => setLinkTitle(e.target.value)} placeholder="账号名称（可选）" />
+                        <input className="rounded-lg border border-black/10 px-3 py-2 text-sm" value={linkBackground} onChange={e => setLinkBackground(e.target.value)} placeholder="头像或背景图片 URL（可选）" />
+                        <button type="submit" className="rounded-lg bg-black px-3 py-2 text-sm text-white">添加 Link 卡片</button>
                         <button
                             type="button"
                             onClick={async () => {
@@ -398,6 +382,7 @@ export const EditorToolbar: React.FC = () => {
                     </form>
                 </div>
             )}
+            {showLinkImport && <LinkImportModal onAdd={addWidget} onClose={() => setShowLinkImport(false)} />}
 
 
             <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[1000]">
@@ -439,6 +424,7 @@ export const EditorToolbar: React.FC = () => {
                             tooltip="Add Link"
                             onClick={handleAddLink}
                         />
+                        <button type="button" onClick={() => setShowLinkImport(true)} className="rounded-lg px-2 py-1 text-xs font-medium hover:bg-black/5" title="批量导入 Link 卡片">批量导入 Link</button>
                         <ToolbarButton
                             icon={<ImageIcon />}
                             tooltip="Add Image"

@@ -14,6 +14,7 @@ import type { WidgetConfig } from '@/bento/widgets/types'
 import { createImageWidgetConfig, createLinkWidgetConfig } from '@/bento/widgets'
 import { createGalleryImage } from '@/bento/widgets/image/gallery'
 import { pairMediaFiles, uploadMedia } from '@/lib/client/upload-image'
+import { LinkLibraryPanel } from './LinkLibraryPanel'
 
 // ============ Editor View Wrapper ============
 
@@ -92,7 +93,10 @@ const EditorContent: React.FC<{ centerVersion: number; showSearch: boolean; spac
                 const step = event.shiftKey ? 2 : 1
                 const x = (widget.x ?? 0) + (event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0)
                 const y = (widget.y ?? 0) + (event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0)
-                reorderWidgets(resolveCanvasDrop(widgets, widget.id, x, y, showSearch))
+                const participants = widgets.filter(item => item.category !== 'link' || item.onCanvas !== false)
+                const positioned = resolveCanvasDrop(participants, widget.id, x, y, showSearch)
+                const byId = new Map(positioned.map(item => [item.id, item]))
+                reorderWidgets(widgets.map(item => byId.get(item.id) || item))
             }
         }
         window.addEventListener('keydown', onKeyDown)
@@ -103,12 +107,15 @@ const EditorContent: React.FC<{ centerVersion: number; showSearch: boolean; spac
     // Never rewrite coordinates while a card is being dragged.
     useEffect(() => {
         if (!widgets.length || draggingIdRef.current) return
-        const missing = widgets.some((w) => typeof w.x !== 'number' || typeof w.y !== 'number')
+        const canvasWidgets = widgets.filter(w => w.category !== 'link' || w.onCanvas !== false)
+        const missing = canvasWidgets.some((w) => typeof w.x !== 'number' || typeof w.y !== 'number')
         if (repairedOnce.current && !missing) return
-        const positioned = assignCanvasPositions(widgets, showSearch)
+        const positioned = assignCanvasPositions(canvasWidgets, showSearch)
+        const byId = new Map(positioned.map(widget => [widget.id, widget]))
+        const next = widgets.map(widget => byId.get(widget.id) || widget)
         repairedOnce.current = true
-        if (positioned.some((w, i) => w.x !== widgets[i].x || w.y !== widgets[i].y)) {
-            reorderWidgets(positioned)
+        if (next.some((w, i) => w.x !== widgets[i].x || w.y !== widgets[i].y)) {
+            reorderWidgets(next)
         }
     }, [widgets, reorderWidgets, showSearch])
 
@@ -166,12 +173,18 @@ const HubShell: React.FC<{ space: 'home' | 'notes' | 'gallery' | 'bookmarks' }> 
         updateProfile,
         widgets,
         reorderWidgets,
+        updateWidget,
+        addWidget,
     } = useEditor()
     const [showSettings, setShowSettings] = useState(false)
+    const [showLibrary, setShowLibrary] = useState(false)
     const [centerVersion, setCenterVersion] = useState(0)
     const applyAutoLayout = (mode: AutoLayoutMode = 'balanced') => {
         if (!isEditing || !widgets.length) return
-        reorderWidgets(autoLayoutWidgets(widgets, mode, space === 'home'))
+        const canvasWidgets = widgets.filter(widget => widget.category !== 'link' || widget.onCanvas !== false)
+        const positioned = autoLayoutWidgets(canvasWidgets, mode, space === 'home')
+        const byId = new Map(positioned.map(widget => [widget.id, widget]))
+        reorderWidgets(widgets.map(widget => byId.get(widget.id) || widget))
         setCenterVersion((version) => version + 1)
     }
 
@@ -182,10 +195,12 @@ const HubShell: React.FC<{ space: 'home' | 'notes' | 'gallery' | 'bookmarks' }> 
                 isEditing={isEditing}
                 onToggleEdit={() => setIsEditing(!isEditing)}
                 onOpenSettings={() => setShowSettings(true)}
+                onOpenLibrary={() => setShowLibrary(true)}
                 onAutoLayout={applyAutoLayout}
             />
             <CommandPalette onAutoLayout={applyAutoLayout} />
             <RadialNavigation hidden={showSettings} compact={isEditing} />
+            {showLibrary && <LinkLibraryPanel space={space} widgets={widgets} isEditing={isEditing} onUpdate={updateWidget} onAdd={addWidget} onClose={() => setShowLibrary(false)} />}
             {showSettings && (
                 <SettingsModal
                     profile={profile}

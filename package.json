@@ -38,6 +38,8 @@
     "build": "next build --webpack",
     "typecheck": "tsc --noEmit",
     "test:canvas": "node --experimental-strip-types --test tests/canvasPlacement.test.mjs",
+    "test:links": "node --experimental-strip-types --test tests/linkImport.test.mjs",
+    "test:link-check": "node --experimental-strip-types --test tests/linkAddress.test.mjs",
     "start": "next start",
     "lint": "eslint",
     "migrate:images": "node scripts/migrate-embedded-images.mjs"
