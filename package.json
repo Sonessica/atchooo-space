@@ -40,11 +40,13 @@
     "test:canvas": "node --experimental-strip-types --test tests/canvasPlacement.test.mjs",
     "test:links": "node --experimental-strip-types --test tests/linkImport.test.mjs",
     "test:link-check": "node --experimental-strip-types --test tests/linkAddress.test.mjs",
+    "test:vaultwarden": "node --experimental-strip-types --test tests/vaultwardenLinks.test.mjs",
     "start": "next start",
     "lint": "eslint",
     "migrate:images": "node scripts/migrate-embedded-images.mjs"
   },
   "dependencies": {
+    "@bitwarden/cli": "2026.6.0",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/modifiers": "^9.0.0",
     "@dnd-kit/sortable": "^10.0.0",

@@ -98,6 +98,7 @@ export interface LinkWidgetConfig extends BaseWidgetConfig {
         finalUrl?: string
         error?: string
     }
+    vaultwardenSource?: { itemId: string; uriIndex: number; sourceTitle: string }
 }
 
 // ============ Image Widget ============

@@ -167,6 +167,7 @@ Undo/Redo 使用统一快照历史，覆盖创建、删除、复制、内容更�
 - 编辑工具栏提供“批量导入 Link”，可上传或粘贴 CSV、JSON，预览后一次加入当前 Space。CSV 第一行须有 `url`，可选列为 `title`、`subtitle`、`ctaLabel`、`backgroundImage`、`customIcon`、`menuBg`、`collection`、`tags`、`onCanvas`；CSV 的多个标签用分号分隔，JSON 的 `tags` 可用字符串数组。每次最多 200 条，仅接受 HTTP/HTTPS URL。
 - 页面左下角“收藏夹”汇总四个 Space 的 Link，可按标题、URL、标签、收藏夹和检查状态筛选。编辑模式下可设置标签和收藏夹，也可把链接从当前画布移除并保留在收藏夹，之后再显示到画布。其他 Space 的链接可跳转到对应 Space 编辑或复制到当前画布。
 - 编辑模式下可手动检查当前 Space 的全部或单条链接。检查结果分为正常、已跳转、失效（404/410）和无法判断，随 Space 快照保存；修改 URL 会清除旧结果。检查接口需要管理员会话，并拒绝请求内网地址。
+- 编辑模式下可在收藏夹点击“立即同步 Vaultwarden”。先登录站点管理员，再输入 Vaultwarden 主密码；密码只用于本次同步，不写入环境变量或数据库。同步会将登录条目的 HTTPS 网址导入 Bookmarks，并通过来源条目 ID 更新已有卡片。手动设置的背景、标签、收藏夹和画布状态会保留；保管库中删除的条目不会自动删除对应卡片。网址中的查询参数和片段会被移除，OAuth 授权页会改为站点首页。同步后的 Link 卡片公开可见。
 
 ### Media / Gallery
 
@@ -233,6 +234,7 @@ Undo/Redo 使用统一快照历史，覆盖创建、删除、复制、内容更�
 ```bash
 cp .env.example .env
 # 设置至少 6 字符的 ATCHOOO_ADMIN_PASSWORD
+# 如需 Vaultwarden 同步，另设 VAULTWARDEN_URL 和 VAULTWARDEN_EMAIL；不要把主密码写入 .env
 # 以及至少 32 字符的 ATCHOOO_SESSION_SECRET
 docker compose up -d --build
 docker compose logs --tail=50 atchooo-space
