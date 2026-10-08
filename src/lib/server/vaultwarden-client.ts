@@ -13,7 +13,7 @@ export async function readVaultwardenItems(masterPassword: string): Promise<unkn
   const email = process.env.VAULTWARDEN_EMAIL
   if (!server || !email || new URL(server).protocol !== 'https:') throw new Error('Vaultwarden is not configured')
   const dir = await mkdtemp(join(tmpdir(), 'atchooo-vault-'))
-  const cli = process.env.BW_CLI_PATH || join(process.cwd(), 'node_modules', '@bitwarden', 'cli', 'build', 'bw.js')
+  const cli = process.env.BW_CLI_PATH || '/opt/bitwarden/node_modules/@bitwarden/cli/build/bw.js'
   const env = { ...process.env, BITWARDENCLI_APPDATA_DIR: dir, BW_PASSWORD: masterPassword }
   const run = async (args: string[]) => {
     const result = await exec(process.execPath, [cli, ...args], {
