@@ -1,8 +1,9 @@
 ARG RUNTIME_BASE=docker.1ms.run/library/node:22-bookworm-slim
 FROM docker.1ms.run/library/node:22-bookworm-slim AS deps
 WORKDIR /app
+ARG NPM_REGISTRY=https://registry.npmjs.org
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm ci --registry=${NPM_REGISTRY}
 
 FROM docker.1ms.run/library/node:22-bookworm-slim AS builder
 WORKDIR /app
