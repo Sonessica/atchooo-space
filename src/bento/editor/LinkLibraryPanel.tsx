@@ -3,8 +3,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { SPACE_CONFIGS, type SpaceId } from '@/lib/space-config'
 import type { LinkWidgetConfig, WidgetConfig } from '@/bento/widgets/types'
+import { useEditorPersistence } from './PersistentEditorProvider'
 
 type LibraryEntry = { space: SpaceId; link: LinkWidgetConfig }
+type VaultPreview = { itemId: string; uriIndex: number; title: string; url: string }
 const HEALTH_LABEL = { ok: '正常', redirected: '已跳转', broken: '失效', unknown: '无法判断' } as const
 
 export function LinkLibraryPanel({ space, widgets, isEditing, onUpdate, onAdd, onClose }: {
@@ -15,6 +17,7 @@ export function LinkLibraryPanel({ space, widgets, isEditing, onUpdate, onAdd, o
   onAdd: (widget: WidgetConfig) => void
   onClose: () => void
 }) {
+  const { flush } = useEditorPersistence()
   const [remote, setRemote] = useState<LibraryEntry[]>([])
   const [query, setQuery] = useState('')
   const [collection, setCollection] = useState('')
@@ -25,6 +28,9 @@ export function LinkLibraryPanel({ space, widgets, isEditing, onUpdate, onAdd, o
   const [message, setMessage] = useState('')
   const [password, setPassword] = useState('')
   const [vaultPassword, setVaultPassword] = useState('')
+  const [vaultPreview, setVaultPreview] = useState<VaultPreview[]>([])
+  const [previewRevision, setPreviewRevision] = useState<number | null>(null)
+  const [selectedVaultLinks, setSelectedVaultLinks] = useState<Set<string>>(new Set())
   const [needsLogin, setNeedsLogin] = useState(false)
 
   useEffect(() => {
@@ -90,7 +96,7 @@ export function LinkLibraryPanel({ space, widgets, isEditing, onUpdate, onAdd, o
     setMessage('已登录，可以检查链接或同步 Vaultwarden')
   }
 
-  async function syncVaultwarden() {
+  async function previewVaultwarden() {
     if (!vaultPassword || syncing) return
     setSyncing(true)
     setMessage('')
@@ -98,17 +104,44 @@ export function LinkLibraryPanel({ space, widgets, isEditing, onUpdate, onAdd, o
       const session = await fetch('/api/private/session', { cache: 'no-store' })
       const auth = await session.json() as { authenticated?: boolean }
       if (!auth.authenticated) { setNeedsLogin(true); setMessage('同步需要先登录站点管理员'); return }
+      if (space === 'bookmarks' && !(await flush())) throw new Error('Bookmarks 尚未保存，请处理保存错误后重试')
       const response = await fetch('/api/private/vaultwarden-sync', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: vaultPassword }),
+        body: JSON.stringify({ action: 'preview', password: vaultPassword }),
       })
-      setVaultPassword('')
-      const data = await response.json() as { error?: string; added?: number; updated?: number; adopted?: number; total?: number; skipped?: number }
+      const data = await response.json() as { error?: string; revision?: number; links?: VaultPreview[]; skipped?: number }
       if (!response.ok) throw new Error(data.error || `同步失败（${response.status}）`)
-      setMessage(`同步完成：新增 ${data.added}，更新 ${data.updated}，关联已有卡片 ${data.adopted}；共 ${data.total} 条${data.skipped ? `，跳过 ${data.skipped} 条非 HTTPS 链接` : ''}`)
-      window.setTimeout(() => window.location.reload(), 1600)
+      const links = data.links || []
+      setVaultPreview(links)
+      setPreviewRevision(data.revision ?? null)
+      setSelectedVaultLinks(new Set())
+      setMessage(`已读取 ${links.length} 条可同步链接${data.skipped ? `，跳过 ${data.skipped} 条不支持的链接` : ''}；请选择要公开的条目`)
     } catch (error) {
+      setMessage(error instanceof Error ? error.message : '同步失败')
+    } finally { setSyncing(false) }
+  }
+
+  async function applyVaultwarden() {
+    if (!vaultPassword || syncing || previewRevision === null || !selectedVaultLinks.size) return
+    setSyncing(true)
+    setMessage('')
+    try {
+      if (space === 'bookmarks' && !(await flush())) throw new Error('Bookmarks 尚未保存，请处理保存错误后重试')
+      const selected = vaultPreview.filter(link => selectedVaultLinks.has(`${link.itemId}:${link.uriIndex}`))
+        .map(link => ({ itemId: link.itemId, uriIndex: link.uriIndex }))
+      const response = await fetch('/api/private/vaultwarden-sync', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'apply', password: vaultPassword, expectedRevision: previewRevision, selected }),
+      })
+      const data = await response.json() as { error?: string; added?: number; updated?: number; adopted?: number; total?: number }
+      if (!response.ok) throw new Error(data.error || `同步失败（${response.status}）`)
       setVaultPassword('')
+      setVaultPreview([])
+      setSelectedVaultLinks(new Set())
+      setPreviewRevision(null)
+      setMessage(`同步完成：新增 ${data.added}，更新 ${data.updated}，关联已有卡片 ${data.adopted}；公开 ${data.total} 条`)
+      window.setTimeout(() => window.location.reload(), 1200)
+    } catch (error) {
       setMessage(error instanceof Error ? error.message : '同步失败')
     } finally { setSyncing(false) }
   }
@@ -133,8 +166,26 @@ export function LinkLibraryPanel({ space, widgets, isEditing, onUpdate, onAdd, o
       </div>
       {isEditing && <div className="mt-3 flex flex-wrap items-center gap-2">
         <input type="password" autoComplete="off" value={vaultPassword} onChange={event => setVaultPassword(event.target.value)} className="min-w-0 flex-1 rounded-lg border border-black/10 bg-white px-3 py-2 text-xs" placeholder="Vaultwarden 主密码（仅本次同步使用）" />
-        <button disabled={!vaultPassword || syncing} className="rounded-lg bg-blue-600 px-3 py-2 text-xs text-white disabled:opacity-40" onClick={() => void syncVaultwarden()}>{syncing ? '正在同步…' : '立即同步 Vaultwarden'}</button>
-        <span className="w-full text-[11px] text-black/50">同步到 Bookmarks；只同步标题和网址，卡片会公开显示。不会自动删除卡片。</span>
+        <button disabled={!vaultPassword || syncing} className="rounded-lg bg-blue-600 px-3 py-2 text-xs text-white disabled:opacity-40" onClick={() => void previewVaultwarden()}>{syncing ? '正在读取…' : '预览 Vaultwarden'}</button>
+        <span className="w-full text-[11px] text-black/50">只有预览后明确勾选的条目才会同步到 Bookmarks 并公开显示；主密码与保管库条目 ID不会写入公开卡片。</span>
+        {vaultPreview.length > 0 && <div className="w-full rounded-xl border border-black/10 bg-white p-3">
+          <div className="mb-2 flex items-center justify-between"><span className="text-xs font-semibold">选择公开条目（最多 20 条）</span><span className="text-[11px] text-black/50">已选 {selectedVaultLinks.size}</span></div>
+          <div className="max-h-48 space-y-1 overflow-auto">
+            {vaultPreview.map(link => {
+              const key = `${link.itemId}:${link.uriIndex}`
+              return <label key={key} className="flex items-start gap-2 rounded-lg px-2 py-1.5 hover:bg-black/5">
+                <input type="checkbox" className="mt-0.5" checked={selectedVaultLinks.has(key)} onChange={event => setSelectedVaultLinks(current => {
+                  const next = new Set(current)
+                  if (event.target.checked && next.size < 20) next.add(key)
+                  else if (!event.target.checked) next.delete(key)
+                  return next
+                })} />
+                <span className="min-w-0"><span className="block truncate text-xs font-medium">{link.title}</span><span className="block truncate text-[10px] text-black/45">{link.url}</span></span>
+              </label>
+            })}
+          </div>
+          <button disabled={!selectedVaultLinks.size || syncing} className="mt-3 rounded-lg bg-black px-3 py-2 text-xs text-white disabled:opacity-40" onClick={() => void applyVaultwarden()}>{syncing ? '正在同步…' : `同步所选 ${selectedVaultLinks.size} 条`}</button>
+        </div>}
       </div>}
       {needsLogin && <form className="mt-3 flex gap-2" onSubmit={event => { event.preventDefault(); void login() }}><input type="password" value={password} onChange={event => setPassword(event.target.value)} className="min-w-0 flex-1 rounded-lg border px-3 py-2 text-sm" placeholder="管理员密码（ATCHOOO_ADMIN_PASSWORD）" /><button className="rounded-lg bg-black px-3 py-2 text-xs text-white">登录</button></form>}
       <div className="mt-4 flex-1 space-y-2 overflow-auto pb-4">

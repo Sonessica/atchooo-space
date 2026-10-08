@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { EditorProvider, useEditor, type ProfileData } from './EditorContext'
 import type { WidgetConfig } from '../widgets/types'
 import savingLoader from './SavingLoader.module.css'
@@ -27,6 +27,12 @@ const PROFILE_KEY = 'openbento-profile'
 const defaultProfile: ProfileData = {
   name: 'ATCHOOO',
   description: 'Personal hub',
+}
+
+const PersistenceContext = createContext<{ flush: () => Promise<boolean> }>({ flush: async () => true })
+
+export function useEditorPersistence() {
+  return useContext(PersistenceContext)
 }
 
 function cacheSnapshot(space: EditorSpace, snapshot: Stored | null) {
@@ -78,7 +84,7 @@ function localSnapshot(): Snapshot | null {
   }
 }
 
-function PersistenceSync({ initial, space }: { initial: Stored | null; space: string }) {
+function PersistenceSync({ initial, space, children }: { initial: Stored | null; space: string; children: React.ReactNode }) {
   const { widgets, profile, siteSettings } = useEditor()
   const [status, setStatus] = useState<SaveState>('saved')
   const revision = useRef(initial?.revision || 0)
@@ -125,6 +131,16 @@ function PersistenceSync({ initial, space }: { initial: Stored | null; space: st
     }
   }, [space])
 
+  const flush = useCallback(async () => {
+    // A save may already be processing an older snapshot. Wait for its loop to
+    // drain, then make one final pass over the latest in-memory state.
+    while (running.current) await new Promise(resolve => window.setTimeout(resolve, 25))
+    if (conflicted.current) return false
+    if (JSON.stringify(latest.current) !== savedHash.current) await save()
+    while (running.current) await new Promise(resolve => window.setTimeout(resolve, 25))
+    return !conflicted.current && JSON.stringify(latest.current) === savedHash.current
+  }, [save])
+
   useEffect(() => {
     const timer = setTimeout(() => { hydrated.current = true }, 400)
     return () => clearTimeout(timer)
@@ -142,8 +158,8 @@ function PersistenceSync({ initial, space }: { initial: Stored | null; space: st
     return () => clearTimeout(timer)
   }, [widgets, profile, siteSettings, initial, save])
 
-  if (status === 'saved') return null
-  if (status === 'saving') return (
+  let indicator: React.ReactNode = null
+  if (status === 'saving') indicator = (
     <div
       role="status"
       aria-label="正在保存到 NAS"
@@ -153,10 +169,11 @@ function PersistenceSync({ initial, space }: { initial: Stored | null; space: st
       <div className={savingLoader.loader} aria-hidden="true" />
     </div>
   )
-  return <div role="alert" className="fixed top-4 right-4 z-[100] rounded-xl border border-white/10 bg-black/55 px-4 py-2 text-sm text-white shadow-lg backdrop-blur-md">
+  if (status === 'error' || status === 'conflict') indicator = <div role="alert" className="fixed top-4 right-4 z-[100] rounded-xl border border-white/10 bg-black/55 px-4 py-2 text-sm text-white shadow-lg backdrop-blur-md">
     {status === 'error' && <><span>保存失败，修改仍在此浏览器。</span><button className="ml-3 underline" onClick={() => void save()}>重试</button></>}
     {status === 'conflict' && <><span>其他浏览器已更新，请先刷新页面。</span><button className="ml-3 underline" onClick={() => location.reload()}>刷新</button></>}
   </div>
+  return <PersistenceContext.Provider value={{ flush }}>{children}{indicator}</PersistenceContext.Provider>
 }
 
 function toEditorInitial(snapshot: Stored | null) {
@@ -257,8 +274,7 @@ export function PersistentEditorProvider({
 
       {ready && splashDone && (
         <EditorProvider persistence="external" initialSnapshot={toEditorInitial(initial)}>
-          <PersistenceSync initial={initial} space={space} />
-          {children}
+          <PersistenceSync initial={initial} space={space}>{children}</PersistenceSync>
         </EditorProvider>
       )}
 

@@ -25,7 +25,11 @@ function normalizeWidgets(value: unknown) {
   return value.map((widget) => {
     if (!widget || typeof widget !== 'object') return widget
     const data = widget as Record<string, unknown>
-    return data.size === 'bar' ? { ...data, size: '2x1' } : widget
+    // Vaultwarden source identities belong in the private mapping table, never
+    // in the public editor snapshot returned to visitors.
+    const { vaultwardenSource: _privateSource, ...publicData } = data
+    void _privateSource
+    return data.size === 'bar' ? { ...publicData, size: '2x1' } : publicData
   })
 }
 
@@ -89,7 +93,53 @@ function getDatabase() {
       updated_at TEXT NOT NULL
     )
   `)
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS vaultwarden_link_sources (
+      item_id TEXT NOT NULL,
+      uri_index INTEGER NOT NULL,
+      widget_id TEXT NOT NULL,
+      source_title TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (item_id, uri_index)
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS vaultwarden_link_sources_widget
+      ON vaultwarden_link_sources(widget_id)
+  `)
   return database
+}
+
+export type VaultwardenLinkSource = {
+  itemId: string
+  uriIndex: number
+  widgetId: string
+  sourceTitle: string
+}
+
+export function readVaultwardenLinkSources(): VaultwardenLinkSource[] {
+  const rows = getDatabase().prepare(`SELECT item_id, uri_index, widget_id, source_title
+    FROM vaultwarden_link_sources`).all() as {
+      item_id: string; uri_index: number; widget_id: string; source_title: string
+    }[]
+  return rows.map(row => ({ itemId: row.item_id, uriIndex: row.uri_index,
+    widgetId: row.widget_id, sourceTitle: row.source_title }))
+}
+
+export function saveVaultwardenLinkSources(sources: VaultwardenLinkSource[]) {
+  if (!sources.length) return
+  const db = getDatabase()
+  const statement = db.prepare(`INSERT INTO vaultwarden_link_sources
+    (item_id, uri_index, widget_id, source_title, updated_at) VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(item_id, uri_index) DO UPDATE SET widget_id = excluded.widget_id,
+    source_title = excluded.source_title, updated_at = excluded.updated_at`)
+  const updatedAt = new Date().toISOString()
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    for (const source of sources) statement.run(source.itemId, source.uriIndex, source.widgetId, source.sourceTitle, updatedAt)
+    db.exec('COMMIT')
+  } catch (error) {
+    db.exec('ROLLBACK')
+    throw error
+  }
 }
 
 export type StoredGlobalSettings = {
