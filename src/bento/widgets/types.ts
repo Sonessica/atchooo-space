@@ -82,7 +82,7 @@ export interface LinkWidgetConfig extends BaseWidgetConfig {
     customColor?: string // Card face / media fallback color
     /** Separate URL for the bottom-left icon (defaults to url) */
     iconUrl?: string
-    /** Bottom menu / panel background color */
+    /** Legacy snapshot/import field; glass link cards no longer use this color. */
     menuBg?: string
     /** Full-card background image (uploaded WebP or remote URL) */
     backgroundImage?: string

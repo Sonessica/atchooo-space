@@ -101,13 +101,6 @@ function LinkFields({ widget, onUpdate }: { widget: LinkWidgetConfig; onUpdate: 
         <label className={labelClass}>左下角图标跳转（可选，默认同链接）
             <OptionalText value={widget.iconUrl} placeholder={widget.url} onChange={iconUrl => onUpdate({ iconUrl })} />
         </label>
-        <label className={labelClass}>底部菜单背景色
-            <div className="flex gap-2">
-                <input className="h-10 w-12 rounded-lg border border-black/10 p-1" type="color" value={widget.menuBg || '#fbb9b6'}
-                    onChange={event => onUpdate({ menuBg: event.target.value })} />
-                <OptionalText value={widget.menuBg} placeholder="#fbb9b6" onChange={menuBg => onUpdate({ menuBg })} />
-            </div>
-        </label>
         <label className={labelClass}>卡片背景图（悬停时缩为左上头像）
             <div className="flex flex-wrap items-center gap-2">
                 <button type="button" className={btnClassDark} onClick={() => fileRef.current?.click()}>上传图片</button>
