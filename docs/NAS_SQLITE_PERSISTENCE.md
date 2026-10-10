@@ -16,6 +16,6 @@ Compose 将宿主机 `./data` 挂载到容器 `/app/data`。默认数据库为 `
 
 备份应同时保护数据库和 `media/`，并放在 `data/` 目录之外。推荐使用 SQLite online backup API 生成一致性数据库副本，再复制媒体目录；另一种做法是先停止应用容器，再复制整个 `data/`（包含可能存在的 `-wal`、`-shm` 文件）。运行中只拷贝主 `.sqlite` 文件可能遗漏尚在 WAL 中的写入。
 
-恢复时先停应用，确认备份来自同一时点，恢复数据库与对应媒体目录后再启动。不要把备份文件放回 `data/` 作为常驻文件：它会增加空间占用，也容易与当前数据库混淆。部署代码更新通常不需要清空或重建数据库；`docker compose up -d --build` 会继续使用原有 bind mount。
+恢复时先停应用，确认备份来自同一时点，恢复数据库与对应媒体目录后再启动。不要把备份文件放回 `data/` 作为常驻文件：它会增加空间占用，也容易与当前数据库混淆。部署代码更新通常不需要清空或重建数据库；NAS 仅拉取 GitHub Actions 生成的镜像，使用 `docker compose --env-file .env --env-file deploy-image.env up -d --no-build` 继续使用原有 bind mount。不要在 NAS 上运行构建；发布和回退见 [部署说明](DEPLOYMENT.md)。
 
 仓库仍保留旧版 Supabase 路由和会话代码；这些不是当前共享快照的备份来源。
