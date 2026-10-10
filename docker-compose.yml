@@ -2,12 +2,7 @@ name: atchooo-space
 
 services:
   atchooo-space:
-    build:
-      context: .
-      args:
-        RUNTIME_BASE: ${ATCHOOO_RUNTIME_BASE:-docker.1ms.run/library/node:22-bookworm-slim}
-        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org}
-    image: atchooo-space:latest
+    image: ${ATCHOOO_IMAGE:-ghcr.io/sonessica/atchooo-space:latest}
     container_name: atchooo-space
     restart: unless-stopped
     environment:
@@ -21,7 +16,13 @@ services:
       ATCHOOO_SESSION_SECRET: ${ATCHOOO_SESSION_SECRET:?Set ATCHOOO_SESSION_SECRET in .env}
       VAULTWARDEN_URL: ${VAULTWARDEN_URL:-}
       VAULTWARDEN_EMAIL: ${VAULTWARDEN_EMAIL:-}
-      BW_CLI_PATH: ${BW_CLI_PATH:-}
+      BW_CLI_PATH: ${BW_CLI_PATH:-/opt/bitwarden/node_modules/@bitwarden/cli/build/bw.js}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/private/editor').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     volumes:
       - ./data:/app/data
     networks:

@@ -237,13 +237,16 @@ cp .env.example .env
 # 设置至少 6 字符的 ATCHOOO_ADMIN_PASSWORD
 # 如需 Vaultwarden 同步，另设 VAULTWARDEN_URL 和 VAULTWARDEN_EMAIL；不要把主密码写入 .env
 # 以及至少 32 字符的 ATCHOOO_SESSION_SECRET
-docker compose up -d --build
+docker compose pull
+docker compose up -d --no-build
 docker compose logs --tail=50 atchooo-space
 ```
 
-Dockerfile 将 FFmpeg 安装在应用文件复制之前。首次构建仍需下载 FFmpeg；后续只修改应用代码时，Docker 可复用该层，无需再次下载。更换基础镜像、修改 FFmpeg 安装步骤、清理构建缓存或在新构建机上构建时，该层仍需重新生成。部署时保留 Docker/BuildKit 构建缓存，避免使用 `--no-cache`。
+发布由 [GitHub Actions](.github/workflows/deploy.yml) 执行：main 推送 → Linux 构建与 lint/测试 → standalone 镜像启动验证 → GHCR 发布 → NAS 拉取并重建应用容器。NAS 不执行 npm 安装或 Next.js 构建。私有 GHCR 镜像手工拉取前需先登录；自动发布使用短期 GITHUB_TOKEN，登录配置部署后即删除。
 
-NAS 若已有包含 FFmpeg 的运行镜像，可先给它打一个固定标签，再在 NAS 的 `.env` 中设置 `ATCHOOO_RUNTIME_BASE` 为该标签。构建会跳过 FFmpeg 安装，复用该镜像作为运行基础层；不要删除这个固定标签。未设置时仍使用标准 Node 镜像并安装 FFmpeg，因此新环境可以独立构建。
+独立运行基础镜像 `ghcr.io/sonessica/atchooo-space-runtime` 仅包含官方 Node 22、FFmpeg、CA 证书和固定版本 Bitwarden CLI，不继承历史应用镜像。应用镜像只复制 `.next/standalone`、静态资源、public 和维护脚本，不复制完整开发依赖。两套 BuildKit 缓存保存在 GitHub Actions；缓存失效或更新基础镜像时仍可能重新下载基础依赖，但不会在 NAS 上执行。
+
+仓库需配置加密 Secret `NAS_SSH_PASSWORD`。部署固定 SSH 主机公钥，使用现有 Docker 代理拉取镜像；网络失败不会先停止旧服务。部署脚本在 `releases/<commit>/before.sqlite` 创建在线 SQLite 备份，保留 `.env` 和 `data/`，以镜像 digest 固定版本，健康检查失败回退旧镜像（不自动回滚数据库）。备份不复制媒体：当前发布不修改已有媒体；完整备份仍需另行备份媒体目录。不要删除上一版镜像或全局 prune。发布记录与回退参考见 [部署说明](docs/DEPLOYMENT.md)。
 
 当前 `docker-compose.yml` 的公开地址为 `https://space.atchooo.com:2096`。更换域名时需要同步检查 Compose、Dockerfile 中的 `NEXT_PUBLIC_APP_URL` 以及反向代理。
 
