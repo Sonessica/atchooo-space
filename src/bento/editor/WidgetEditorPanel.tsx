@@ -229,12 +229,12 @@ function SectionFields({ widget, onUpdate, widgets, selectedIds, onWidgetsChange
     const [uploadStatus, setUploadStatus] = useState('')
     const members = widgets.filter(w => w.groupId === widget.id).map(w => w.id)
     const chosen = draft ?? members
-    const select = (label: string, value: string, options: [string, string][], change: (value: string) => void) => <label className={labelClass}>{label}<select className={fieldClass} value={value} onChange={e => change(e.target.value)}>{options.map(([value, text]) => <option key={value} value={value}>{text}</option>)}</select></label>
+    const select = (label: string, value: string, options: [string, string][], change: (value: string) => void) => <label className={labelClass}>{label}<select aria-label={label} className={fieldClass} value={value} onChange={e => change(e.target.value)}>{options.map(([value, text]) => <option key={value} value={value}>{text}</option>)}</select></label>
     return <>
         <div className="flex gap-2">{[['content', '内容'], ['style', '样式'], ['group', `分组 (${members.length})`]].map(([key, text]) => <button key={key} type="button" className={tab === key ? btnClassDark : btnGhostClass} onClick={() => setTab(key)}>{text}</button>)}</div>
         {tab === 'content' && <>
-            <label className={labelClass}>主标题（支持换行）<textarea rows={3} className={fieldClass} value={widget.title} onChange={e => onUpdate({ title: e.target.value })} /></label>
-            <label className={labelClass}>副标题<textarea rows={3} className={fieldClass} value={widget.subtitle || ''} onChange={e => onUpdate({ subtitle: e.target.value })} /></label>
+            <label className={labelClass}>主标题（支持换行）<textarea aria-label="主标题（支持换行）" rows={3} className={fieldClass} value={widget.title} onChange={e => onUpdate({ title: e.target.value })} /></label>
+            <label className={labelClass}>副标题<textarea aria-label="副标题" rows={3} className={fieldClass} value={widget.subtitle || ''} onChange={e => onUpdate({ subtitle: e.target.value })} /></label>
             <label className={labelClass}>图标（Emoji 或图片 URL）<OptionalText value={widget.icon} onChange={icon => onUpdate({ icon })} /></label>
             <div className="flex flex-wrap gap-2">{['📁', '⭐', '📌', '📚', '🎨', '🔗'].map(icon => <button key={icon} type="button" className={btnGhostClass} onClick={() => onUpdate({ icon })}>{icon}</button>)}</div>
             <input ref={fileRef} type="file" accept="image/*" hidden onChange={async e => {

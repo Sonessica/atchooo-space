@@ -250,7 +250,7 @@ export function InfiniteCanvas({
   }, [widgets, selectedWidgetId, draggingId, editingWidgetId, lightbox?.widgetId, cullPan, viewportSize, isEditing, sections, visitorCollapsed])
 
   const onViewportPointerDown = (e: React.PointerEvent) => {
-    if (rangeSection && !(e.target as HTMLElement).closest('[data-canvas-chrome]')) {
+    if (isEditing && rangeSection && !(e.target as HTMLElement).closest('[data-canvas-chrome]')) {
       const rect = viewportRef.current!.getBoundingClientRect()
       const x = (e.clientX - rect.left - pan.x) / zoom / STEP
       const y = (e.clientY - rect.top - pan.y) / zoom / STEP
@@ -345,7 +345,6 @@ export function InfiniteCanvas({
     }
     dragX.set(0)
     dragY.set(0)
-    e.preventDefault()
     if (e.shiftKey) onToggleSelection?.(w.id)
     else onSelect(w.id)
   }
@@ -439,7 +438,7 @@ export function InfiniteCanvas({
         className="absolute left-0 top-0 will-change-transform"
         style={{ transform: `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoom})`, transformOrigin: '0 0' }}
       >
-        {rangeRect && <div aria-hidden="true" className="pointer-events-none absolute z-50 border-2 border-blue-500 bg-blue-400/10" style={{ left: rangeRect.left * STEP, top: rangeRect.top * STEP, width: (rangeRect.right - rangeRect.left) * STEP, height: (rangeRect.bottom - rangeRect.top) * STEP }} />}
+        {isEditing && rangeRect && <div aria-hidden="true" className="pointer-events-none absolute z-50 border-2 border-blue-500 bg-blue-400/10" style={{ left: rangeRect.left * STEP, top: rangeRect.top * STEP, width: (rangeRect.right - rangeRect.left) * STEP, height: (rangeRect.bottom - rangeRect.top) * STEP }} />}
         {isEditing && [...sections.values()].filter(section => section.id === selectedWidgetId || widgets.some(w => w.groupId === section.id && w.id === selectedWidgetId)).map(section => {
           const items = widgets.filter(w => w.id === section.id || (!section.collapsed && w.groupId === section.id))
           const left = Math.min(...items.map(w => (w.x ?? 0) * STEP)) - 10
