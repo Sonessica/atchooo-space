@@ -12,8 +12,13 @@ import type {
 import { ImageEditorModal } from './ImageEditorModal'
 import { uploadImage } from '@/lib/client/upload-image'
 import { detectPlatform } from '@/bento/widgets/registry'
+import { nearbySectionMembers, removeSectionWidgets, setSectionMembers } from './sectionGroups'
 
 interface WidgetEditorPanelProps {
+    onPickSectionRange?: (id: string) => void
+    widgets?: WidgetConfig[]
+    selectedIds?: string[]
+    onWidgetsChange?: (widgets: WidgetConfig[]) => void
     widget: WidgetConfig
     onUpdate: (updates: Partial<WidgetConfig>) => void
     onClose: () => void
@@ -33,7 +38,7 @@ function OptionalText({ value, onChange, placeholder }: {
         onChange={event => onChange(event.target.value || undefined)} />
 }
 
-export function WidgetEditorPanel({ widget, onUpdate, onClose }: WidgetEditorPanelProps) {
+export function WidgetEditorPanel({ widget, onUpdate, onClose, widgets = [], selectedIds = [], onWidgetsChange, onPickSectionRange }: WidgetEditorPanelProps) {
     if (widget.category === 'image') {
         return (
             <ImageEditorModal
@@ -64,7 +69,7 @@ export function WidgetEditorPanel({ widget, onUpdate, onClose }: WidgetEditorPan
                 {widget.category === 'link' && <LinkFields widget={widget} onUpdate={onUpdate} />}
                 {widget.category === 'text' && <TextFields widget={widget} onUpdate={onUpdate} />}
                 {widget.category === 'map' && <MapFields widget={widget} onUpdate={onUpdate} />}
-                {widget.category === 'section' && <SectionFields widget={widget} onUpdate={onUpdate} />}
+                {widget.category === 'section' && <SectionFields key={widget.id} widget={widget} onUpdate={onUpdate} widgets={widgets} selectedIds={selectedIds} onWidgetsChange={onWidgetsChange} onClose={onClose} onPickSectionRange={onPickSectionRange} />}
             </div>
         </aside>
     )
@@ -215,8 +220,55 @@ function MapFields({ widget, onUpdate }: { widget: MapWidgetConfig; onUpdate: Wi
     </>
 }
 
-function SectionFields({ widget, onUpdate }: { widget: SectionTitleConfig; onUpdate: WidgetEditorPanelProps['onUpdate'] }) {
-    return <label className={labelClass}>分区标题
-        <input className={fieldClass} value={widget.title} onChange={event => onUpdate({ title: event.target.value })} />
-    </label>
+function SectionFields({ widget, onUpdate, widgets, selectedIds, onWidgetsChange, onClose, onPickSectionRange }: { widget: SectionTitleConfig; onUpdate: WidgetEditorPanelProps['onUpdate']; widgets: WidgetConfig[]; selectedIds: string[]; onWidgetsChange?: (widgets: WidgetConfig[]) => void; onClose: () => void; onPickSectionRange?: (id: string) => void }) {
+    const [tab, setTab] = useState('content')
+    const [draft, setDraft] = useState<string[] | null>(null)
+    const [columns, setColumns] = useState(6)
+    const [rows, setRows] = useState(6)
+    const fileRef = useRef<HTMLInputElement>(null)
+    const [uploadStatus, setUploadStatus] = useState('')
+    const members = widgets.filter(w => w.groupId === widget.id).map(w => w.id)
+    const chosen = draft ?? members
+    const select = (label: string, value: string, options: [string, string][], change: (value: string) => void) => <label className={labelClass}>{label}<select className={fieldClass} value={value} onChange={e => change(e.target.value)}>{options.map(([value, text]) => <option key={value} value={value}>{text}</option>)}</select></label>
+    return <>
+        <div className="flex gap-2">{[['content', '内容'], ['style', '样式'], ['group', `分组 (${members.length})`]].map(([key, text]) => <button key={key} type="button" className={tab === key ? btnClassDark : btnGhostClass} onClick={() => setTab(key)}>{text}</button>)}</div>
+        {tab === 'content' && <>
+            <label className={labelClass}>主标题（支持换行）<textarea rows={3} className={fieldClass} value={widget.title} onChange={e => onUpdate({ title: e.target.value })} /></label>
+            <label className={labelClass}>副标题<textarea rows={3} className={fieldClass} value={widget.subtitle || ''} onChange={e => onUpdate({ subtitle: e.target.value })} /></label>
+            <label className={labelClass}>图标（Emoji 或图片 URL）<OptionalText value={widget.icon} onChange={icon => onUpdate({ icon })} /></label>
+            <div className="flex flex-wrap gap-2">{['📁', '⭐', '📌', '📚', '🎨', '🔗'].map(icon => <button key={icon} type="button" className={btnGhostClass} onClick={() => onUpdate({ icon })}>{icon}</button>)}</div>
+            <input ref={fileRef} type="file" accept="image/*" hidden onChange={async e => {
+                const file = e.target.files?.[0]; if (!file) return
+                setUploadStatus('上传中…')
+                try { onUpdate({ icon: await uploadImage(file) }); setUploadStatus('图标已更新') } catch { setUploadStatus('上传失败，请重试') }
+                e.target.value = ''
+            }} />
+            <button type="button" className={btnGhostClass} onClick={() => fileRef.current?.click()}>上传图标</button>{uploadStatus && <p className="text-xs">{uploadStatus}</p>}
+            <label className={labelClass}>链接（http / https）<OptionalText value={widget.url} onChange={url => onUpdate({ url })} placeholder="https://…" /></label>
+        </>}
+        {tab === 'style' && <>
+            {select('字体', widget.fontFamily || 'system', [['system', '系统默认'], ['sans', '无衬线'], ['serif', '衬线'], ['mono', '等宽']], value => onUpdate({ fontFamily: value as SectionTitleConfig['fontFamily'] }))}
+            {select('字重', String(widget.fontWeight || 500), [['400', '常规'], ['500', '中等'], ['700', '加粗']], value => onUpdate({ fontWeight: Number(value) as SectionTitleConfig['fontWeight'] }))}
+            <label className={labelClass}>标题字号：{widget.fontSize ?? 16}px<input type="range" min={12} max={96} value={widget.fontSize ?? 16} onChange={e => onUpdate({ fontSize: Number(e.target.value) })} /></label>
+            <label className={labelClass}>副标题字号：{widget.subtitleSize ?? 13}px<input type="range" min={10} max={48} value={widget.subtitleSize ?? 13} onChange={e => onUpdate({ subtitleSize: Number(e.target.value) })} /></label>
+            <div className="grid grid-cols-2 gap-3"><label className={labelClass}>标题颜色<input type="color" value={widget.color || '#1a1a1a'} onChange={e => onUpdate({ color: e.target.value })} /></label><label className={labelClass}>副标题颜色<input type="color" value={widget.subtitleColor || '#6b7280'} onChange={e => onUpdate({ subtitleColor: e.target.value })} /></label></div>
+            {select('水平对齐', widget.align || 'left', [['left', '左对齐'], ['center', '居中'], ['right', '右对齐']], value => onUpdate({ align: value as SectionTitleConfig['align'] }))}
+            {select('垂直对齐', widget.verticalAlign || 'center', [['top', '顶部'], ['center', '居中'], ['bottom', '底部']], value => onUpdate({ verticalAlign: value as SectionTitleConfig['verticalAlign'] }))}
+            {select('背景', widget.background || 'transparent', [['transparent', '透明'], ['solid', '纯色'], ['glass', '磨砂玻璃']], value => onUpdate({ background: value as SectionTitleConfig['background'] }))}
+            {widget.background && widget.background !== 'transparent' && <><label className={labelClass}>背景色<input type="color" value={widget.backgroundColor || '#ffffff'} onChange={e => onUpdate({ backgroundColor: e.target.value })} /></label><label className={labelClass}>背景透明度<input type="range" min={0} max={1} step={.05} value={widget.backgroundOpacity ?? (widget.background === 'glass' ? .65 : 1)} onChange={e => onUpdate({ backgroundOpacity: Number(e.target.value) })} /></label></>}
+        </>}
+        {tab === 'group' && <>
+            <p className="text-xs leading-5 text-black/50">成员仅属于一个分区。勾选其他分区成员会转移归属；标题不能嵌套。修改成员后点击确认。</p>
+            <button type="button" className={btnGhostClass} onClick={() => setDraft([...new Set([...chosen, ...selectedIds])])}>加入当前多选卡片</button>
+            <button type="button" className={btnGhostClass} onClick={() => { onPickSectionRange?.(widget.id); onClose() }}>在画布拖框选择成员…</button>
+            <div className="grid grid-cols-2 gap-2"><label className={labelClass}>下方范围宽（格）<input type="number" min={1} max={50} className={fieldClass} value={columns} onChange={e => setColumns(Math.max(1, Math.min(50, Number(e.target.value))))} /></label><label className={labelClass}>下方范围高（格）<input type="number" min={1} max={50} className={fieldClass} value={rows} onChange={e => setRows(Math.max(1, Math.min(50, Number(e.target.value))))} /></label></div>
+            <button type="button" className={btnGhostClass} onClick={() => setDraft([...new Set([...members, ...nearbySectionMembers(widgets, widget.id, columns, rows)])])}>预选下方范围内卡片</button>
+            <div className="max-h-60 space-y-2 overflow-y-auto">{widgets.filter(w => w.category !== 'section' && !(w.category === 'link' && w.onCanvas === false)).map(w => <label key={w.id} className="flex items-center gap-2 text-xs"><input type="checkbox" checked={chosen.includes(w.id)} onChange={e => setDraft(e.target.checked ? [...chosen, w.id] : chosen.filter(id => id !== w.id))} /><span className="truncate">{'title' in w && w.title || w.category} {w.groupId && w.groupId !== widget.id ? '（其他分区）' : ''}</span></label>)}</div>
+            <button type="button" className={btnClassDark} onClick={() => { onWidgetsChange?.(setSectionMembers(widgets, widget.id, chosen)); setDraft(null) }}>确认成员 ({chosen.filter(id => widgets.some(w => w.id === id && w.category !== 'section')).length})</button>
+            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={!!widget.collapsed} onChange={e => onUpdate({ collapsed: e.target.checked })} />默认折叠（保存到 NAS）</label>
+            <p className="text-xs text-black/45">折叠保留成员占位；访客展开/收起不会修改共享数据。</p>
+            <button type="button" className={btnGhostClass} onClick={() => { onWidgetsChange?.(setSectionMembers(widgets, widget.id, [])); setDraft(null) }}>解散分组，保留所有卡片</button>
+            <button type="button" className="rounded-xl bg-red-50 p-3 text-sm text-red-700" onClick={() => { if (window.confirm('删除标题和该分区全部成员？此操作可撤销。')) { onWidgetsChange?.(removeSectionWidgets(widgets, [widget.id, ...members])); onClose() } }}>删除整个分区</button>
+        </>}
+    </>
 }

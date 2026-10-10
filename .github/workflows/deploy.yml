@@ -45,6 +45,14 @@ jobs:
             GIT_REVISION=${{ github.sha }}
           cache-from: type=gha,scope=application
           cache-to: type=gha,mode=max,scope=application
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install browser test tools
+        run: |
+          npm ci --ignore-scripts
+          npx playwright install --with-deps chromium
       - name: Verify image
         run: node scripts/smoke-image.mjs "$IMAGE:$GITHUB_SHA"
       - name: Publish tested image

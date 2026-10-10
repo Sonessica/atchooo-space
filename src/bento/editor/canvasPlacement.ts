@@ -106,7 +106,37 @@ export function assignCanvasPositions(widgets: WidgetConfig[], reserveSearch = t
   return widgets.map((widget) => ({ ...widget, ...positions.get(widget.id)! }))
 }
 
+/** Arrange rigid sections as units, preserving member offsets, including folded slots. */
+function layoutSectionUnits(widgets: WidgetConfig[], reserveSearch: boolean): WidgetConfig[] {
+  const occupied = searchCells(reserveSearch)
+  const units = new Map<string, WidgetConfig[]>()
+  const positions = new Map<string, Point>()
+  for (const w of widgets) {
+    const id = w.category === 'section' ? w.id : w.groupId || w.id
+    units.set(id, [...(units.get(id) || []), w])
+  }
+  for (const unit of units.values()) {
+    if (!unit.some(w => w.locked)) continue
+    for (const w of unit) { reserve(occupied, { x: w.x ?? 0, y: w.y ?? 0 }, w.size); positions.set(w.id, { x: w.x ?? 0, y: w.y ?? 0 }) }
+  }
+  for (const unit of units.values()) {
+    if (unit.some(w => w.locked)) continue
+    const anchor = unit.find(w => w.category === 'section') || unit[0]
+    for (const candidate of spiral({ x: 0, y: 0 })) {
+      const trial = unit.map(w => ({ ...w, x: (w.x ?? 0) - (anchor.x ?? 0) + candidate.x, y: (w.y ?? 0) - (anchor.y ?? 0) + candidate.y }))
+      // Reject invalid incoming internal geometry instead of searching forever.
+      if (!isValidCanvasLayout(trial, false)) return widgets
+      if (!trial.every(w => isFree(occupied, pointOf(w), w.size))) continue
+      for (const w of trial) { reserve(occupied, pointOf(w), w.size); positions.set(w.id, pointOf(w)) }
+      break
+    }
+  }
+  const next = withPositions(widgets, positions)
+  return isValidCanvasLayout(next, reserveSearch) ? next : widgets
+}
+
 export function autoLayoutFromCenter(widgets: WidgetConfig[], reserveSearch = true): WidgetConfig[] {
+  if (widgets.some(w => w.groupId)) return layoutSectionUnits(widgets, reserveSearch)
   const occupied = searchCells(reserveSearch)
   const order = widgets.map((widget, index) => ({ widget, index }))
     .sort((a, b) => area(b.widget) - area(a.widget) || a.index - b.index)
@@ -123,6 +153,7 @@ export function autoLayoutFromCenter(widgets: WidgetConfig[], reserveSearch = tr
 export type AutoLayoutMode = 'compact' | 'balanced' | 'organic' | 'rows' | 'columns' | 'focus'
 
 export function autoLayoutWidgets(widgets: WidgetConfig[], mode: AutoLayoutMode = 'balanced', reserveSearch = true) {
+  if (widgets.some(w => w.groupId)) return layoutSectionUnits(widgets, reserveSearch)
   if (mode === 'balanced' || mode === 'organic' || mode === 'focus') return autoLayoutFromCenter(widgets, reserveSearch)
   const occupied = searchCells(reserveSearch)
   const positions = new Map<string, Point>()
@@ -230,10 +261,57 @@ function withPositions(widgets: WidgetConfig[], positions: Map<string, Point>) {
   })
 }
 
+/** Atomic rigid-body move. Reserve actual occupied cells, never the bounding box.
+ * External sections are displaced as rigid units; locked units cannot be pushed.
+ */
+export function resolveCanvasGroupDrop(widgets: WidgetConfig[], ids: Set<string>, anchorId: string, x: number, y: number, reserveSearch = true): WidgetConfig[] {
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return widgets
+  const anchor = widgets.find(w => w.id === anchorId)
+  const moving = widgets.filter(w => ids.has(w.id))
+  if (!anchor || !moving.length || moving.some(w => w.locked)) return widgets
+  const dx = Math.round(x) - (anchor.x ?? 0), dy = Math.round(y) - (anchor.y ?? 0)
+  const targets = moving.map(w => ({ ...w, x: (w.x ?? 0) + dx, y: (w.y ?? 0) + dy }))
+  if (!isValidCanvasLayout(targets, reserveSearch)) return widgets
+  const movingCells = occupiedBy(targets, new Set(), reserveSearch)
+  const remaining = widgets.filter(w => !ids.has(w.id))
+  const groupKey = (w: WidgetConfig) => w.category === 'section' ? w.id : w.groupId || w.id
+  const units = new Map<string, WidgetConfig[]>()
+  for (const w of remaining) {
+    const key = groupKey(w)
+    units.set(key, [...(units.get(key) || []), w])
+  }
+  const blockers = [...units.values()].filter(unit => unit.some(w => !isFree(movingCells, { x: w.x ?? 0, y: w.y ?? 0 }, w.size)))
+  if (blockers.some(unit => unit.some(w => w.locked))) return widgets
+  const blockerIds = new Set(blockers.flatMap(unit => unit.map(w => w.id)))
+  const occupied = occupiedBy(remaining, blockerIds, reserveSearch)
+  for (const target of targets) {
+    if (!isFree(occupied, pointOf(target), target.size)) return widgets
+    reserve(occupied, pointOf(target), target.size)
+  }
+  const positions = new Map(targets.map(w => [w.id, pointOf(w)]))
+  for (const unit of blockers) {
+    if (!isValidCanvasLayout(unit, false)) return widgets
+    // Finitely many occupied cells guarantee an eventual free rigid placement.
+    for (const offset of spiral({ x: 0, y: 0 })) {
+      const trial = unit.map(w => ({ ...w, x: (w.x ?? 0) + offset.x, y: (w.y ?? 0) + offset.y }))
+      if (!trial.every(w => isFree(occupied, pointOf(w), w.size))) continue
+      for (const w of trial) { reserve(occupied, pointOf(w), w.size); positions.set(w.id, pointOf(w)) }
+      break
+    }
+  }
+  const result = withPositions(widgets, positions)
+  return isValidCanvasLayout(result, reserveSearch) ? result : widgets
+}
+
 export function resolveCanvasDrop(widgets: WidgetConfig[], id: string, x: number, y: number, reserveSearch = true): WidgetConfig[] {
+  if (widgets.some(w => w.groupId)) {
+    const moving = widgets.find(w => w.id === id)
+    const ids = new Set(widgets.filter(w => w.id === id || (moving?.category === 'section' && w.groupId === id)).map(w => w.id))
+    return resolveCanvasGroupDrop(widgets, ids, id, x, y, reserveSearch)
+  }
   // Repair any pre-existing overlap before planning the drop. Every returned
   // layout is checked as a whole, including the search bar and all card cells.
-  const placed = isValidCanvasLayout(widgets) ? widgets : assignCanvasPositions(widgets)
+  const placed = isValidCanvasLayout(widgets, reserveSearch) ? widgets : assignCanvasPositions(widgets, reserveSearch)
   const moving = placed.find((widget) => widget.id === id)
   if (!moving) return placed
 
@@ -283,6 +361,13 @@ export function resolveCanvasDrop(widgets: WidgetConfig[], id: string, x: number
 }
 
 export function resolveCanvasResize(widgets: WidgetConfig[], id: string, size: WidgetSize, reserveSearch = true): WidgetConfig[] {
+  if (widgets.some(w => w.groupId)) {
+    const current = widgets.find(w => w.id === id)
+    if (!current || current.locked) return widgets
+    const proposed = widgets.map(w => w.id === id ? { ...w, size } : w)
+    const next = resolveCanvasGroupDrop(proposed, new Set([id]), id, current.x ?? 0, current.y ?? 0, reserveSearch)
+    return isValidCanvasLayout(next, reserveSearch) ? next : widgets
+  }
   const placed = isValidCanvasLayout(widgets, reserveSearch) ? widgets : assignCanvasPositions(widgets, reserveSearch)
   const current = placed.find((widget) => widget.id === id)
   if (!current || current.size === size) return placed

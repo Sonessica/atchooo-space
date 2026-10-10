@@ -1,7 +1,7 @@
 /**
  * [INPUT]: (WidgetConfig[], ProfileData, optional external snapshot) - Widget configuration array, profile data, and persistence mode
  * [OUTPUT]: (EditorProvider, useEditor) - Editor context provider and hook with widget and profile management
- * [POS]: Located at /bento/editor state management layer; manages editor state with legacy browser storage or an externally persisted snapshot.
+ * [POS]: Editor state/history; removing section headers dissolves membership without deleting children.
  * 
  * [PROTOCOL]:
  * 1. Once this file's logic changes, this Header must be synchronized immediately.
@@ -12,6 +12,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import type { WidgetConfig, WidgetSize } from '../widgets/types'
 import { useUserStore } from '@/stores'
 import { DEFAULT_SITE_SETTINGS, normalizeSiteSettings, type SiteSettings } from './siteSettings'
+import { removeSectionWidgets } from './sectionGroups'
 
 export type ViewMode = 'desktop' | 'mobile'
 
@@ -539,7 +540,7 @@ export const EditorProvider: React.FC<{
     }, [viewMode])
 
     const removeDesktopWidget = useCallback((id: string) => {
-        setDesktopWidgets((prev) => prev.filter((w) => w.id !== id))
+        setDesktopWidgets((prev) => removeSectionWidgets(prev, [id]))
         if (viewMode === 'desktop') {
             setSelectedWidgetId((prev) => (prev === id ? null : prev))
         }
@@ -565,7 +566,7 @@ export const EditorProvider: React.FC<{
     }, [viewMode])
 
     const removeMobileWidget = useCallback((id: string) => {
-        setMobileWidgets((prev) => prev.filter((w) => w.id !== id))
+        setMobileWidgets((prev) => removeSectionWidgets(prev, [id]))
         if (viewMode === 'mobile') {
             setSelectedWidgetId((prev) => (prev === id ? null : prev))
         }
@@ -722,7 +723,7 @@ export const EditorProvider: React.FC<{
     const duplicateWidget = useCallback((id: string) => {
         const source = widgets.find((widget) => widget.id === id)
         if (!source) return
-        addWidget({ ...structuredClone(source), id: crypto.randomUUID(), x: (source.x ?? 0) + 1, y: (source.y ?? 0) + 1 })
+        addWidget({ ...structuredClone(source), groupId: undefined, id: crypto.randomUUID(), x: (source.x ?? 0) + 1, y: (source.y ?? 0) + 1 })
     }, [addWidget, widgets])
 
     // ============ Layout Sync ============

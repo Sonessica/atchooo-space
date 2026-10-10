@@ -173,7 +173,6 @@ export const WidgetEditOverlay: React.FC<WidgetEditOverlayProps> = ({
     if (typeof document === 'undefined') return null
 
     const isMapWidget = widget.category === 'map'
-    const isSectionWidget = widget.category === 'section'
     const isHidden = !!widget.hidden
     const isLocked = !!widget.locked
 
@@ -231,7 +230,7 @@ export const WidgetEditOverlay: React.FC<WidgetEditOverlayProps> = ({
                 </div>
 
                 {/* Size + map tools row */}
-                {!isSectionWidget && (
+                {(
                     <div className="flex items-center gap-1 border-t border-white/10 p-1.5">
                         <span className="pl-1 pr-0.5 text-[10px] uppercase tracking-wide text-white/40">尺寸</span>
                         {SIZE_VARIANTS.map((size) => {

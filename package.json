@@ -38,6 +38,7 @@
     "build": "next build --webpack",
     "typecheck": "tsc --noEmit",
     "test:canvas": "node --experimental-strip-types --test tests/canvasPlacement.test.mjs",
+    "test:sections": "node --experimental-strip-types --test tests/sectionGroups.test.mjs",
     "test:links": "node --experimental-strip-types --test tests/linkImport.test.mjs",
     "test:link-check": "node --experimental-strip-types --test tests/linkAddress.test.mjs",
     "test:vaultwarden": "node --experimental-strip-types --test tests/vaultwardenLinks.test.mjs",
@@ -72,6 +73,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.1.0",
+    "playwright": "1.64.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

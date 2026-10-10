@@ -15,6 +15,7 @@ import { createImageWidgetConfig, createLinkWidgetConfig } from '@/bento/widgets
 import { createGalleryImage } from '@/bento/widgets/image/gallery'
 import { pairMediaFiles, uploadMedia } from '@/lib/client/upload-image'
 import { LinkLibraryPanel } from './LinkLibraryPanel'
+import { removeSectionWidgets } from './sectionGroups'
 
 // ============ Editor View Wrapper ============
 
@@ -83,7 +84,7 @@ const EditorContent: React.FC<{ centerVersion: number; showSearch: boolean; spac
             if ((event.key === 'Delete' || event.key === 'Backspace') && selectedWidgetId) {
                 event.preventDefault()
                 const ids = selectedWidgetIds.length ? selectedWidgetIds : [selectedWidgetId]
-                ids.forEach(removeWidget); setSelectedWidgetIds([]); return
+                reorderWidgets(removeSectionWidgets(widgets, ids)); setSelectedWidgetIds([]); setSelectedWidgetId(null); return
             }
             if (event.key === 'Escape') { setSelectedWidgetId(null); return }
             if (selectedWidgetId && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) {

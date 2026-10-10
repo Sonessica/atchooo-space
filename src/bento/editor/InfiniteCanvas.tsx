@@ -13,9 +13,11 @@ import { WidgetEditOverlay } from '@/bento/editor'
 import { WidgetEditorPanel } from '@/bento/editor'
 import type { GalleryImage, ImageWidgetConfig, WidgetConfig, WidgetSize } from '@/bento/widgets/types'
 import { WIDGET_SIZES } from '@/bento/widgets/types'
-import { resolveCanvasDrop, resolveCanvasResize, SEARCH_COLS } from './canvasPlacement'
+import { assignCanvasPositions, resolveCanvasDrop, resolveCanvasResize, SEARCH_COLS } from './canvasPlacement'
 import { normalizeImageGallery, resolveCoverIndex } from '@/bento/widgets/image/gallery'
 import { useGlobalSettings } from './GlobalSettingsProvider'
+import { sectionMoveIds, setSectionMembers, sectionMembersInRect } from './sectionGroups'
+import { createSectionTitleConfig } from '../widgets/section/SectionTitleWidget'
 import {
   bindCanvasRecenter,
   bindCanvasZoom,
@@ -125,6 +127,17 @@ export function InfiniteCanvas({
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 })
   const [query, setQuery] = useState('')
   const [draggingId, setDraggingId] = useState<string | null>(null)
+  const [visitorCollapsed, setVisitorCollapsed] = useState<Record<string, boolean>>({})
+  const [rangeSection, setRangeSection] = useState<string | null>(null)
+  const [rangeRect, setRangeRect] = useState<{ left: number; top: number; right: number; bottom: number } | null>(null)
+  const [rangePreview, setRangePreview] = useState<string[] | null>(null)
+  const rangeStart = useRef<{ x: number; y: number } | null>(null)
+  const sections = useMemo(() => new Map(widgets.filter(w => w.category === 'section').map(w => [w.id, w])), [widgets])
+  const isCollapsed = (id: string) => {
+    const section = sections.get(id)
+    return section?.category === 'section' && (isEditing ? !!section.collapsed : visitorCollapsed[id] ?? !!section.collapsed)
+  }
+  const movingIds = draggingId ? sectionMoveIds(widgets, draggingId) : new Set<string>()
   const [lightbox, setLightbox] = useState<{
     widgetId: string
     index: number
@@ -219,6 +232,8 @@ export function InfiniteCanvas({
     if (!viewportSize.width || !viewportSize.height) return []
     const overscan = STEP * 2
     return widgets.filter((w) => {
+      const parent = w.groupId ? sections.get(w.groupId) : undefined
+      if (parent?.category === 'section' && ((isEditing ? parent.collapsed : visitorCollapsed[parent.id] ?? parent.collapsed) || (parent.hidden && !isEditing))) return false
       if (w.category === 'link' && w.onCanvas === false) return false
       if (w.hidden && !isEditing) return false
       if (w.id === selectedWidgetId || w.id === draggingId || w.id === editingWidgetId || w.id === lightbox?.widgetId) return true
@@ -232,9 +247,16 @@ export function InfiniteCanvas({
         y <= viewportSize.height + overscan
       )
     })
-  }, [widgets, selectedWidgetId, draggingId, editingWidgetId, lightbox?.widgetId, cullPan, viewportSize, isEditing])
+  }, [widgets, selectedWidgetId, draggingId, editingWidgetId, lightbox?.widgetId, cullPan, viewportSize, isEditing, sections, visitorCollapsed])
 
   const onViewportPointerDown = (e: React.PointerEvent) => {
+    if (rangeSection && !(e.target as HTMLElement).closest('[data-canvas-chrome]')) {
+      const rect = viewportRef.current!.getBoundingClientRect()
+      const x = (e.clientX - rect.left - pan.x) / zoom / STEP
+      const y = (e.clientY - rect.top - pan.y) / zoom / STEP
+      rangeStart.current = { x, y }; setRangeRect(null); setRangePreview(null)
+      e.currentTarget.setPointerCapture(e.pointerId); e.preventDefault(); return
+    }
     if ((e.target as HTMLElement).closest('[data-canvas-card]')) return
     if ((e.target as HTMLElement).closest('[data-canvas-search]')) return
     if ((e.target as HTMLElement).closest('[data-canvas-chrome]')) return
@@ -244,6 +266,12 @@ export function InfiniteCanvas({
   }
 
   const onViewportPointerMove = (e: React.PointerEvent) => {
+    if (rangeStart.current) {
+      const rect = viewportRef.current!.getBoundingClientRect()
+      const x = (e.clientX - rect.left - pan.x) / zoom / STEP
+      const y = (e.clientY - rect.top - pan.y) / zoom / STEP
+      setRangeRect({ left: Math.floor(Math.min(x, rangeStart.current.x)), top: Math.floor(Math.min(y, rangeStart.current.y)), right: Math.ceil(Math.max(x, rangeStart.current.x)), bottom: Math.ceil(Math.max(y, rangeStart.current.y)) }); return
+    }
     const p = panDrag.current
     if (p) {
       setPan({ x: p.panX + (e.clientX - p.x), y: p.panY + (e.clientY - p.y) })
@@ -267,6 +295,10 @@ export function InfiniteCanvas({
   }
 
   const onViewportPointerUp = () => {
+    if (rangeStart.current) {
+      if (rangeRect && rangeSection) setRangePreview(sectionMembersInRect(widgets, rangeSection, rangeRect))
+      rangeStart.current = null; return
+    }
     const c = cardDrag.current
     if (c && isEditing && c.moved) {
       const dx = dragX.get()
@@ -294,8 +326,11 @@ export function InfiniteCanvas({
   }
 
   const startCardDrag = (e: React.PointerEvent, w: WidgetConfig) => {
+    if (rangeSection) return
     if (!isEditing || e.button !== 0) return
     const target = e.target as HTMLElement
+    if (target.closest('[data-section-control], button, a')) return
+    if (w.locked || (w.category === 'section' && widgets.some(item => item.groupId === w.id && item.locked))) return
     if (target.closest('input, textarea, select, [contenteditable="true"]')) return
     if (target.closest('[data-widget-overlay]')) return
     const x = typeof w.x === 'number' ? w.x : 0
@@ -404,6 +439,15 @@ export function InfiniteCanvas({
         className="absolute left-0 top-0 will-change-transform"
         style={{ transform: `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoom})`, transformOrigin: '0 0' }}
       >
+        {rangeRect && <div aria-hidden="true" className="pointer-events-none absolute z-50 border-2 border-blue-500 bg-blue-400/10" style={{ left: rangeRect.left * STEP, top: rangeRect.top * STEP, width: (rangeRect.right - rangeRect.left) * STEP, height: (rangeRect.bottom - rangeRect.top) * STEP }} />}
+        {isEditing && [...sections.values()].filter(section => section.id === selectedWidgetId || widgets.some(w => w.groupId === section.id && w.id === selectedWidgetId)).map(section => {
+          const items = widgets.filter(w => w.id === section.id || (!section.collapsed && w.groupId === section.id))
+          const left = Math.min(...items.map(w => (w.x ?? 0) * STEP)) - 10
+          const top = Math.min(...items.map(w => (w.y ?? 0) * STEP)) - 10
+          const right = Math.max(...items.map(w => (w.x ?? 0) * STEP + widgetPixelSize(w.size).width)) + 10
+          const bottom = Math.max(...items.map(w => (w.y ?? 0) * STEP + widgetPixelSize(w.size).height)) + 10
+          return <div key={`boundary-${section.id}`} aria-hidden="true" className="pointer-events-none absolute rounded-[32px] border border-dashed border-blue-400/50 bg-blue-400/[.025]" style={{ left, top, width: right - left, height: bottom - top }} />
+        })}
         {showSearch && <div
           data-canvas-search
           className="absolute z-20 flex items-center"
@@ -429,7 +473,7 @@ export function InfiniteCanvas({
           const y = typeof w.y === 'number' ? w.y : 0
           const px = widgetPixelSize(w.size)
           const hit = matchesQuery(w, query)
-          const isDragged = draggingId === w.id
+          const isDragged = movingIds.has(w.id)
           const isHiddenCard = !!w.hidden
           const gallery =
             w.category === 'image'
@@ -507,12 +551,18 @@ export function InfiniteCanvas({
                 className="h-full w-full overflow-hidden rounded-[27px]"
                 // Browsing widgets need their own hover/buttons; editing keeps
                 // pointer targeting on the canvas wrapper for selection/dragging.
-                style={{ pointerEvents: !isEditing && (w.category === 'image' || w.category === 'link') ? 'auto' : 'none' }}
+                style={{ pointerEvents: w.category === 'section' || (!isEditing && (w.category === 'image' || w.category === 'link')) ? 'auto' : 'none' }}
               >
                 <WidgetRenderer
                   config={w}
                   isEditing={isEditing}
                   onConfigChange={(u) => onUpdateWidget(w.id, u)}
+                  groupCount={w.category === 'section' ? widgets.filter(item => item.groupId === w.id).length : undefined}
+                  groupCollapsed={w.category === 'section' ? isCollapsed(w.id) : undefined}
+                  onToggleGroup={() => {
+                    if (isEditing) onUpdateWidget(w.id, { collapsed: !isCollapsed(w.id) })
+                    else setVisitorCollapsed(current => ({ ...current, [w.id]: !isCollapsed(w.id) }))
+                  }}
                 />
               </div>
               {isEditing && isHiddenCard && (
@@ -547,6 +597,19 @@ export function InfiniteCanvas({
       </div>
 
       {onAutoLayout && null}
+      {isEditing && onWidgetsChange && selectedWidgetIds.filter(id => widgets.some(w => w.id === id && w.category !== 'section')).length > 1 && <button data-canvas-chrome type="button" className="fixed bottom-36 left-6 z-50 rounded-full bg-black px-5 py-3 text-sm text-white shadow-lg" onClick={() => {
+        const title = createSectionTitleConfig('新分区')
+        const selected = widgets.filter(w => selectedWidgetIds.includes(w.id))
+        title.x = Math.min(...selected.map(w => w.x ?? 0)); title.y = Math.min(...selected.map(w => w.y ?? 0)) - 1
+        const next = setSectionMembers([...widgets, title], title.id, selectedWidgetIds)
+        const positioned = mergePositions(next, assignCanvasPositions(canvasParticipants(next), showSearch))
+        onWidgetsChange(positioned); onSelect(title.id); onOpenEdit(title.id)
+      }}>将多选卡片创建为分区</button>}
+      {isEditing && rangeSection && <div data-canvas-chrome className="fixed left-1/2 top-6 z-[10000] flex -translate-x-1/2 items-center gap-3 rounded-2xl bg-white p-4 text-sm text-black shadow-xl" onPointerDown={e => e.stopPropagation()}><span>{rangePreview ? `预选 ${rangePreview.length} 张卡片（完整包含）` : '拖动框选范围，松开预览，再确认'}</span>{rangePreview && <button type="button" className="rounded-lg bg-blue-600 px-3 py-2 text-white" onClick={() => {
+        const existing = widgets.filter(w => w.groupId === rangeSection).map(w => w.id)
+        onWidgetsChange?.(setSectionMembers(widgets, rangeSection, [...new Set([...existing, ...rangePreview])]))
+        setRangeSection(null); setRangeRect(null); setRangePreview(null)
+      }}>确认加入</button>}<button type="button" onClick={() => { rangeStart.current = null; setRangeSection(null); setRangeRect(null); setRangePreview(null) }}>取消</button></div>}
 
       <AnimatePresence>
         {lightbox && lightboxImage && (
@@ -650,6 +713,10 @@ export function InfiniteCanvas({
       {isEditing && editingWidget && (
         <WidgetEditorPanel
           widget={editingWidget}
+          widgets={widgets}
+          selectedIds={selectedWidgetIds}
+          onWidgetsChange={onWidgetsChange}
+          onPickSectionRange={id => { setRangeSection(id); setRangeRect(null); setRangePreview(null) }}
           onUpdate={(u) => onUpdateWidget(editingWidget.id, u)}
           onClose={() => onOpenEdit('')}
         />

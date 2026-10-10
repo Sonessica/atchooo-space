@@ -26,7 +26,7 @@ ARG NEXT_PUBLIC_APP_URL=https://space.atchooo.com:2096
 ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
 ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
 ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
-RUN npm run lint && npm run test:canvas && npm run test:links && npm run test:link-check && npm run test:vaultwarden
+RUN npm run lint && npm run test:canvas && npm run test:sections && npm run test:links && npm run test:link-check && npm run test:vaultwarden
 RUN --mount=type=cache,target=/app/.next/cache npm run build
 
 FROM ${RUNTIME_BASE} AS runner

@@ -56,6 +56,8 @@ export type SocialPlatform =
 // ============ Base Widget Config ============
 
 export interface BaseWidgetConfig {
+    /** Explicit section ownership within this Space; sections cannot nest. */
+    groupId?: string
     id: string
     category: WidgetCategory
     size: WidgetSize
@@ -190,6 +192,21 @@ export interface MapWidgetConfig extends BaseWidgetConfig {
 export interface SectionTitleConfig extends BaseWidgetConfig {
     category: 'section'
     title: string
+    subtitle?: string
+    icon?: string
+    url?: string
+    fontFamily?: 'system' | 'sans' | 'serif' | 'mono'
+    fontSize?: number
+    subtitleSize?: number
+    fontWeight?: 400 | 500 | 700
+    color?: string
+    subtitleColor?: string
+    align?: 'left' | 'center' | 'right'
+    verticalAlign?: 'top' | 'center' | 'bottom'
+    background?: 'transparent' | 'solid' | 'glass'
+    backgroundColor?: string
+    backgroundOpacity?: number
+    collapsed?: boolean
 }
 
 // ============ Union Type ============
@@ -204,6 +221,9 @@ export type WidgetConfig =
 // ============ Widget Props ============
 
 export interface WidgetProps<T extends WidgetConfig = WidgetConfig> {
+    groupCount?: number
+    groupCollapsed?: boolean
+    onToggleGroup?: () => void
     config: T
     isEditing?: boolean
     onConfigChange?: (config: Partial<T>) => void

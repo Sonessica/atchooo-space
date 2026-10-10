@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import assert from 'node:assert/strict'
+import { smokeSections } from './smoke-sections.mjs'
 const image = process.argv[2]
 assert(image, 'Image argument required')
 const name = `atchooo-smoke-${process.pid}`
@@ -36,6 +37,7 @@ try {
     await new Promise(resolve => setTimeout(resolve, 1000))
   }
   assert(persisted, 'SQLite data missing after restart')
+  await smokeSections(base)
   console.log('Standalone assets, SQLite write/restart persistence, Sharp, FFmpeg/libx264 and Bitwarden CLI path passed.')
 } finally {
   try { console.log(docker('logs', name)) } catch { /* container may not exist */ }
