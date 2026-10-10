@@ -288,8 +288,8 @@ export function InfiniteCanvas({
         ;(viewportRef.current as HTMLElement)?.setPointerCapture(e.pointerId)
       }
       if (c.moved) {
-        dragX.set(dx)
-        dragY.set(dy)
+        dragX.set(dx / zoom)
+        dragY.set(dy / zoom)
       }
     }
   }
@@ -446,7 +446,7 @@ export function InfiniteCanvas({
           const top = Math.min(...items.map(w => (w.y ?? 0) * STEP)) - 10
           const right = Math.max(...items.map(w => (w.x ?? 0) * STEP + widgetPixelSize(w.size).width)) + 10
           const bottom = Math.max(...items.map(w => (w.y ?? 0) * STEP + widgetPixelSize(w.size).height)) + 10
-          return <div key={`boundary-${section.id}`} aria-hidden="true" className="pointer-events-none absolute rounded-[32px] border border-dashed border-blue-400/50 bg-blue-400/[.025]" style={{ left, top, width: right - left, height: bottom - top }} />
+          return <motion.div key={`boundary-${section.id}`} aria-hidden="true" className="pointer-events-none absolute rounded-[32px] border border-dashed border-blue-400/50 bg-blue-400/[.025]" style={{ left, top, width: right - left, height: bottom - top, x: draggingId === section.id ? smoothX : 0, y: draggingId === section.id ? smoothY : 0 }} />
         })}
         {showSearch && <div
           data-canvas-search
@@ -515,7 +515,9 @@ export function InfiniteCanvas({
                     ? '0 0 0 1.5px rgba(245, 158, 11, 0.85)'
                     : selectedWidgetIds.includes(w.id)
                       ? '0 12px 30px rgba(0,0,0,.12)'
-                      : '0 0px 0px rgba(0,0,0,0)',
+                      : isEditing && w.groupId === selectedWidgetId
+                        ? '0 0 0 2px rgba(96,165,250,.35)'
+                        : '0 0px 0px rgba(0,0,0,0)',
               }}
               transition={{
                 type: 'spring',
