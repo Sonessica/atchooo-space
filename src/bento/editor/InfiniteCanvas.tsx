@@ -505,7 +505,9 @@ export function InfiniteCanvas({
               <div
                 data-canvas-card-content
                 className="h-full w-full overflow-hidden rounded-[27px]"
-                style={{ pointerEvents: !isEditing && w.category === 'image' ? 'auto' : 'none' }}
+                // Browsing widgets need their own hover/buttons; editing keeps
+                // pointer targeting on the canvas wrapper for selection/dragging.
+                style={{ pointerEvents: !isEditing && (w.category === 'image' || w.category === 'link') ? 'auto' : 'none' }}
               >
                 <WidgetRenderer
                   config={w}
